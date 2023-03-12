@@ -2,7 +2,9 @@ import { NextFunction, Request, Response } from "express";
 import { isObjectIdOrHexString } from "mongoose";
 
 import { ApiError } from "../error/api.error";
+import { User } from "../model/User.model";
 import { userService } from "../service/user.service";
+import { IRequest } from "../types/password.types";
 import { UserValidator } from "../validator";
 
 class UserMiddleware {
@@ -84,33 +86,57 @@ class UserMiddleware {
     }
   }
 
-  public async updateHandlerError(
+  public getDynamicallyAndThrow(
+    fieldName: string,
+    from = "body",
+    dbField = fieldName
+  ) {
+    return async (req: IRequest, res: Response, next: NextFunction) => {
+      try {
+        const fieldValue = req[from][dbField];
+        const user = await User.findOne({ [dbField]: fieldValue });
+        if (user) {
+          next(new ApiError(`This ${fieldName} already exist`, 409));
+        }
+
+        next();
+      } catch (e) {
+        next(e);
+      }
+    };
+  }
+
+  public getUserDynamicallyOrThrow(
+    fieldName: string,
+    from = "body",
+    dbField = fieldName
+  ) {
+    return async (req: IRequest, res: Response, next: NextFunction) => {
+      try {
+        const fieldValue = req[from][dbField];
+        const user = await User.findOne({ [dbField]: fieldValue });
+
+        if (!user) {
+          next(new ApiError(`User not found`, 422));
+        }
+
+        req.res.locals = user;
+        next();
+      } catch (e) {
+        next(e);
+      }
+    };
+  }
+  public async isValidLogin(
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<void> {
     try {
-      const { name, email, password, gender } = req.body;
+      const { error } = UserValidator.loginUser.validate(req.body);
 
-      const { userId } = req.params;
-
-      if (!name) {
-        throw new ApiError("Wrong name", 422);
-      }
-      if (!email) {
-        throw new ApiError("Wrong email", 422);
-      }
-      if (!password) {
-        throw new ApiError("Wrong password", 422);
-      }
-      if (!gender) {
-        throw new ApiError("Wrong gender", 422);
-      }
-
-      const user = await userService.getById(userId);
-
-      if (!user) {
-        throw new ApiError("User not found", 404);
+      if (error) {
+        next(new ApiError(error.message, 400));
       }
 
       next();

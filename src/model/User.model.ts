@@ -24,7 +24,7 @@ const userScheme = new Schema(
       enum: EGenders,
     },
   },
-  { versionKey: false }
+  { versionKey: false, timestamps: true }
 );
 
 export const User = model("user", userScheme);
